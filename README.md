@@ -22,3 +22,22 @@ A Cloudflare Worker for simulated trading across SPY, BTC/USD and EUR/USD. Cloud
 Run `npm install` and `npm run dev`. Put local secrets in `.dev.vars`. Trigger a local scan using Wrangler's scheduled test endpoint. Workers AI needs an authenticated Cloudflare connection.
 
 Check CPU and AI usage in Cloudflare before increasing the watchlist or proposal frequency. This project uses no live order endpoints and simulated results do not establish profitability.
+
+## TradingAgents research
+
+The [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) Python graph runs on your computer and publishes the latest rating for SPY or BTC/USD to the Cloudflare dashboard. It runs the upstream market analyst, research debate, trader and risk review. The dashboard marks the ratings as advisory. No imported rating can place a simulated or real order. Forex continues through the existing simulator.
+
+1. Install Python 3.11+ and Git, then run `python -m pip install -r integrations/requirements.txt` in a virtual environment.
+2. In Cloudflare, add a separate Worker secret named `RESEARCH_TOKEN` and deploy. Set the same value in your local environment, along with `TRADINGAGENTS_WORKER_URL` set to your Worker HTTPS origin.
+3. For local inference without a paid model API, run Ollama and download a model with tool support, for example `ollama pull qwen3:8b`. Set the following environment variables (PowerShell):
+
+   ```powershell
+   $env:TRADINGAGENTS_LLM_PROVIDER = "ollama"
+   $env:TRADINGAGENTS_QUICK_THINK_LLM = "qwen3:8b"
+   $env:TRADINGAGENTS_DEEP_THINK_LLM = "qwen3:8b"
+   $env:TRADINGAGENTS_LLM_BACKEND_URL = "http://localhost:11434"
+   ```
+
+4. Run `python integrations/tradingagents_report.py SPY` or `python integrations/tradingagents_report.py BTC/USD`. Refresh the dashboard to see the rating and analysis date. Local inference requires a running computer and upstream data access. The Worker can continue demo scanning independently.
+
+The endpoint retains the latest report per symbol and rejects older reports. Keep the research secret and provider credentials out of GitHub.

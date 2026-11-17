@@ -1,3 +1,4 @@
+import {validateResearch} from "./research.mjs";
 import {Agent,getAgentByName} from "agents";
 const markets={SPY:500,"BTC/USD":65000,"EUR/USD":1.08};
 const interval=300000;
@@ -107,6 +108,20 @@ export class Portfolio extends Agent {
     }
   }
   snapshot(){return this.state;}
+  listResearch(){
+    return this.ctx.storage.sql.exec(`SELECT symbol, date, rating FROM research ORDER BY symbol`).toArray();
+  }
+  saveResearch(report){
+    this.ctx.storage.sql.exec(`
+      INSERT INTO research (symbol, date, rating) VALUES (?, ?, ?)
+      ON CONFLICT(symbol) DO UPDATE SET date=excluded.date, rating=excluded.rating
+      WHERE excluded.date >= research.date
+    `,report.symbol,report.date,report.rating);
+    return this.listResearch().find(row=>row.symbol===report.symbol);
+  }
+  onStart(){
+    this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS research (symbol TEXT PRIMARY KEY, date TEXT NOT NULL, rating TEXT NOT NULL)");
+  }
   async tick(time){
     if(this.running)return;
     this.running=true;
@@ -186,12 +201,14 @@ export class Portfolio extends Agent {
     }finally{this.running=false;}
   }
 }
-function dashboard(s){
+function dashboard(s,research){
   const money=n=>Number(n).toFixed(2);
   const escape=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
   const rows=Object.entries(s.books).map(([symbol,b])=>"<tr><td>"+symbol+"</td><td>"+escape(b.status)+"</td><td>"+(b.quotes.length)+"</td><td>"+escape(b.active?.rule.family??(b.challenger?"Shadow testing":"Waiting"))+"</td><td>"+money(b.realised+(b.active?mark(b.active.stats,b.last):0))+"</td></tr>").join("");
   const events=[...s.events].reverse().map(e=>"<tr><td>"+new Date(e.time).toISOString()+"</td><td>"+escape(e.symbol)+"</td><td>"+escape(e.action)+"</td><td>"+escape(JSON.stringify(e.report??e.rule??e.net??e.price??""))+"</td></tr>").join("");
-  return "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Trading Agents</title><style>body{font:16px system-ui;background:#101720;color:#edf3fb;max-width:960px;margin:48px auto;padding:0 20px}section{overflow:auto;margin:28px 0}table{width:100%;border-collapse:collapse}td,th{padding:12px;text-align:left;border-bottom:1px solid #344354}p{color:#b9c8dc}</style><main><h1>Trading Agents</h1><p>Demo simulation · "+escape(s.mode??"Waiting for first scan")+" · "+(s.halted?"Portfolio halted":"Running")+"</p><h2>$"+money(start+s.pnl)+" virtual equity</h2><p>Last scan "+(s.last?new Date(s.last).toISOString():"pending")+"</p><section><h2>Markets</h2><table><thead><tr><th>Symbol</th><th>Feed</th><th>Samples</th><th>Strategy</th><th>Net P&amp;L</th></tr></thead><tbody>"+rows+"</tbody></table></section><section><h2>Activity</h2><table><thead><tr><th>Time</th><th>Market</th><th>Action</th><th>Details</th></tr></thead><tbody>"+events+"</tbody></table></section></main></html>";
+  const researchRows=research.map(r=>"<tr><td>"+escape(r.symbol)+"</td><td>"+escape(r.date)+"</td><td>"+escape(r.rating)+"</td></tr>").join("");
+  const researchSection="<section><h2>TradingAgents research</h2><p>Research ratings are advisory and do not enter the simulator.</p>"+(researchRows?"<table><thead><tr><th>Symbol</th><th>Analysis date</th><th>Rating</th></tr></thead><tbody>"+researchRows+"</tbody></table>":"<p>No reports submitted.</p>")+"</section>";
+  return "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Trading Agents</title><style>body{font:16px system-ui;background:#101720;color:#edf3fb;max-width:960px;margin:48px auto;padding:0 20px}section{overflow:auto;margin:28px 0}table{width:100%;border-collapse:collapse}td,th{padding:12px;text-align:left;border-bottom:1px solid #344354}p{color:#b9c8dc}</style><main><h1>Trading Agents</h1><p>Demo simulation · "+escape(s.mode??"Waiting for first scan")+" · "+(s.halted?"Portfolio halted":"Running")+"</p><h2>$"+money(start+s.pnl)+" virtual equity</h2><p>Last scan "+(s.last?new Date(s.last).toISOString():"pending")+"</p><section><h2>Markets</h2><table><thead><tr><th>Symbol</th><th>Feed</th><th>Samples</th><th>Strategy</th><th>Net P&amp;L</th></tr></thead><tbody>"+rows+"</tbody></table></section><section><h2>Activity</h2><table><thead><tr><th>Time</th><th>Market</th><th>Action</th><th>Details</th></tr></thead><tbody>"+events+"</tbody></table></section>"+researchSection+"</main></html>";
 }
 export default {
   async scheduled(controller,env){
@@ -199,13 +216,27 @@ export default {
     await agent.tick(controller.scheduledTime);
   },
   async fetch(request,env){
-    if(request.method!=="GET"||new URL(request.url).pathname!=="/")return new Response("Not found",{status:404});
+    const path=new URL(request.url).pathname;
+    if(request.method==="POST"&&path==="/api/research"){
+      if(!env.RESEARCH_TOKEN||request.headers.get("Authorization")!=="Bearer "+env.RESEARCH_TOKEN){
+        return new Response("Unauthorized",{status:401});
+      }
+      const report=validateResearch(await request.json().catch(()=>null));
+      if(!report)return Response.json({error:"Invalid research report"},{status:400});
+      const agent=await getAgentByName(env.Portfolio,"research");
+      const saved=await agent.saveResearch(report);
+      if(saved.date!==report.date)return Response.json({error:"A newer report already exists"},{status:409});
+      return Response.json(saved);
+    }
+    if(request.method!=="GET"||path!=="/")return new Response("Not found",{status:404});
     if(!env.DASHBOARD_TOKEN)return new Response("Set DASHBOARD_TOKEN",{status:503});
     const auth=request.headers.get("Authorization");
     if(auth!=="Basic "+btoa("demo:"+env.DASHBOARD_TOKEN)){
       return new Response("Sign in",{status:401,headers:{"WWW-Authenticate":'Basic realm="Trading Agents"'}});
     }
     const agent=await getAgentByName(env.Portfolio,env.DATA_MODE==="provider"?"provider":"synthetic");
-    return new Response(dashboard(await agent.snapshot()),{headers:{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"}});
+    const researchAgent=await getAgentByName(env.Portfolio,"research");
+    const [state,research]=await Promise.all([agent.snapshot(),researchAgent.listResearch()]);
+    return new Response(dashboard(state,research),{headers:{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"}});
   },
 };
