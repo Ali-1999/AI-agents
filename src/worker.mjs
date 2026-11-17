@@ -3,7 +3,8 @@ import {dashboard} from "./dashboard.mjs";
 import {evaluateCandidate} from "./evaluation.mjs";
 import {researchEntryDecision,validateResearch} from "./research.mjs";
 import {Agent,getAgentByName} from "agents";
-const markets={SPY:500,"BTC/USD":65000,"EUR/USD":1.08};
+const markets={SPY:500,"BTC/USD":65000,"EUR/USD":1.08,"XAU/USD":2500};
+const oandaInstruments={"EUR/USD":"EUR_USD","XAU/USD":"XAU_USD"};
 const interval=300000;
 const start=10000;
 const lossLimit=80;
@@ -69,12 +70,13 @@ async function feed(symbol,env,time){
     const data=await fetchJson("https://api.exchange.coinbase.com/products/BTC-USD/ticker",{Accept:"application/json"});
     bid=Number(data.bid);ask=Number(data.ask);at=Date.parse(data.time);
     source="Coinbase Exchange";
-  }else if(symbol==="EUR/USD"){
+  }else if(oandaInstruments[symbol]){
     source="OANDA Practice";
-    if(!env.OANDA_TOKEN||!/^\\d+(?:-\\d+)*$/.test(env.OANDA_ACCOUNT_ID||"")) throw Error("Practice credentials required");
-    const data=await fetchJson("https://api-fxpractice.oanda.com/v3/accounts/"+env.OANDA_ACCOUNT_ID+"/pricing?instruments=EUR_USD",{Authorization:"Bearer "+env.OANDA_TOKEN});
-    const p=data.prices?.[0];
-    if(!p?.tradeable) throw Error("Forex quote unavailable");
+    if(!env.OANDA_TOKEN||!/^\d+(?:-\d+)*$/.test(env.OANDA_ACCOUNT_ID||"")) throw Error("Practice credentials required");
+    const data=await fetchJson("https://api-fxpractice.oanda.com/v3/accounts/"+env.OANDA_ACCOUNT_ID+"/pricing?instruments="+oandaInstruments[symbol],{Authorization:"Bearer "+env.OANDA_TOKEN});
+    const p=data.prices?.find(price=>price.instrument===oandaInstruments[symbol]);
+    if(!p) throw Error("Instrument unavailable on this OANDA Practice account");
+    if(!p.tradeable) throw Error("OANDA quote unavailable or market closed");
     bid=Number(p.bids?.[0]?.price);ask=Number(p.asks?.[0]?.price);at=Date.parse(p.time);
   }else{
     if(!env.ALPACA_KEY||!env.ALPACA_SECRET) throw Error("Alpaca credentials required");

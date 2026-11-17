@@ -1,6 +1,6 @@
 # AI Trading Agents
 
-A Cloudflare Worker for simulated trading across SPY, BTC/USD and EUR/USD. Cloudflare Workers AI proposes strategies, and the open-source [Cloudflare Agents SDK](https://github.com/cloudflare/agents) provides the stateful portfolio agent. SQLite-backed Durable Object storage keeps the latest quote samples, portfolio state and recent activity.
+A Cloudflare Worker for simulated trading across SPY, BTC/USD, EUR/USD and XAU/USD. Cloudflare Workers AI proposes strategies, and the open-source [Cloudflare Agents SDK](https://github.com/cloudflare/agents) provides the stateful portfolio agent. SQLite-backed Durable Object storage keeps the latest quote samples, portfolio state and recent activity.
 
 ## Deploy from GitHub
 
@@ -57,6 +57,6 @@ Set `OPENROUTER_API_KEY` as a Cloudflare Worker secret. The strategy generator t
 
 ## Provider quotes and AI market analysis
 
-The Worker defaults to provider mode. Without Alpaca credentials, BTC/USD uses Coinbase Exchange public quotes. SPY requires Alpaca credentials and EUR/USD requires OANDA Practice credentials. The dashboard reports unavailable feeds and shows source, quote timestamp and raw bid/ask for new provider quotes. Simulated fills still apply the simulator's costs. To use synthetic prices, set DATA_MODE to synthetic.
+The Worker defaults to provider mode. Without Alpaca credentials, BTC/USD uses Coinbase Exchange public quotes. SPY requires Alpaca credentials and EUR/USD and XAU/USD require OANDA Practice credentials. Gold quotes also require XAU_USD to be available on the connected practice account. The TradingAgents research filter applies only to SPY and BTC/USD. The dashboard reports unavailable feeds and shows source, quote timestamp and raw bid/ask for new provider quotes. Simulated fills still apply the simulator's costs. To use synthetic prices, set DATA_MODE to synthetic.
 
 Set OPENROUTER_API_KEY to enable AI Market Analysis. On a scheduled scan with fresh quotes, the Worker requests at most one market summary per UTC hour. It displays the model setting, timestamp and source inputs. Market analysis is informational and never submits orders. The TradingAgents reporter remains a separate source of ratings.
