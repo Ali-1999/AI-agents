@@ -30,6 +30,6 @@
     ]
   },
   "vars": {
-    "DATA_MODE": "synthetic"
+    "DATA_MODE": "provider"
   }
 }

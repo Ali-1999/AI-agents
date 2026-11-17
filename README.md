@@ -10,7 +10,7 @@ A Cloudflare Worker for simulated trading across SPY, BTC/USD and EUR/USD. Cloud
 
 ## How it works
 
-- Synthetic mode is the default and runs without broker credentials. Synthetic and provider sessions have separate history. Provider calls only read prices. All fills use virtual funds.
+- Synthetic mode is optional and runs without broker credentials. Synthetic and provider sessions have separate history. Provider calls only read prices. All fills use virtual funds.
 - The strategy designer can request one model proposal per UTC day across the portfolio. It uses summary statistics from the earlier samples and allows only predefined strategy families and parameter ranges.
 - An instrument needs 280 fresh samples before design starts. At five-minute intervals this takes at least about 23 hours, and session closures or stale quotes can extend it. Backtesting uses the later 240 samples, including a 20-sample warm-up.
 - A proposal needs at least two closed trades, positive net P&L and drawdown below the strategy limit in each of two chronological evaluation windows, at both normal costs and with an additional five basis points of cost per side. It then needs at least twelve closed shadow trades and the same risk and profit checks before it can trade in the demo portfolio.
@@ -54,3 +54,9 @@ The dashboard's BACKTEST activity includes both windows, their net P&L, drawdown
 ## OpenRouter strategy model
 
 Set `OPENROUTER_API_KEY` as a Cloudflare Worker secret. The strategy generator then uses `openrouter/free` by default. To select a specific model, set `OPENROUTER_MODEL` to an exact ID ending in `:free` from the [OpenRouter catalogue](https://openrouter.ai/models). Paid IDs are rejected. Without a key, the Worker uses Cloudflare Workers AI. The local TradingAgents research runner has its own model configuration.
+
+## Provider quotes and AI market analysis
+
+The Worker defaults to provider mode. Without Alpaca credentials, BTC/USD uses Coinbase Exchange public quotes. SPY requires Alpaca credentials and EUR/USD requires OANDA Practice credentials. The dashboard reports unavailable feeds and shows source, quote timestamp and raw bid/ask for new provider quotes. Simulated fills still apply the simulator's costs. To use synthetic prices, set DATA_MODE to synthetic.
+
+Set OPENROUTER_API_KEY to enable AI Market Analysis. On a scheduled scan with fresh quotes, the Worker requests at most one market summary per UTC hour. It displays the model setting, timestamp and source inputs. Market analysis is informational and never submits orders. The TradingAgents reporter remains a separate source of ratings.

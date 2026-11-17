@@ -64,8 +64,13 @@ async function feed(symbol,env,time){
     const mid=markets[symbol]*(1+.018*Math.sin(t/17+Object.keys(markets).indexOf(symbol))+.003*Math.sin(t/5));
     return quote(mid,mid*.9999,mid*1.0001,time,.0002);
   }
-  let bid,ask,at;
-  if(symbol==="EUR/USD"){
+  let bid,ask,at,source;
+  if(symbol==="BTC/USD"&&(!env.ALPACA_KEY||!env.ALPACA_SECRET)){
+    const data=await fetchJson("https://api.exchange.coinbase.com/products/BTC-USD/ticker",{Accept:"application/json"});
+    bid=Number(data.bid);ask=Number(data.ask);at=Date.parse(data.time);
+    source="Coinbase Exchange";
+  }else if(symbol==="EUR/USD"){
+    source="OANDA Practice";
     if(!env.OANDA_TOKEN||!/^\\d+(?:-\\d+)*$/.test(env.OANDA_ACCOUNT_ID||"")) throw Error("Practice credentials required");
     const data=await fetchJson("https://api-fxpractice.oanda.com/v3/accounts/"+env.OANDA_ACCOUNT_ID+"/pricing?instruments=EUR_USD",{Authorization:"Bearer "+env.OANDA_TOKEN});
     const p=data.prices?.[0];
@@ -73,13 +78,14 @@ async function feed(symbol,env,time){
     bid=Number(p.bids?.[0]?.price);ask=Number(p.asks?.[0]?.price);at=Date.parse(p.time);
   }else{
     if(!env.ALPACA_KEY||!env.ALPACA_SECRET) throw Error("Alpaca credentials required");
+    source=symbol==="SPY"?"Alpaca IEX":"Alpaca Crypto";
     const path=symbol==="SPY"?"/v2/stocks/SPY/quotes/latest?feed=iex":"/v1beta3/crypto/us/latest/quotes?symbols=BTC%2FUSD";
     const data=await fetchJson("https://data.alpaca.markets"+path,{"APCA-API-KEY-ID":env.ALPACA_KEY,"APCA-API-SECRET-KEY":env.ALPACA_SECRET});
     const p=data.quote??data.quotes?.[symbol];
     bid=p?.bp;ask=p?.ap;at=Date.parse(p?.t);
   }
   if(!Number.isFinite(at)||Date.now()-at>2*interval||at>Date.now()+30000) throw Error("Stale quote or market closed");
-  return quote((bid+ask)/2,bid,ask,at,symbol==="BTC/USD"?.003:.0005);
+  return {...quote((bid+ask)/2,bid,ask,at,symbol==="BTC/USD"?.003:.0005),rawBid:bid,rawAsk:ask,source};
 }
 function event(s,symbol,time,data){if(data)s.events.push({symbol,time,...data});}
 export class Portfolio extends Agent {
@@ -104,6 +110,29 @@ export class Portfolio extends Agent {
       if(report.passed)book.challenger={rule,stats:blank()};
     }catch {
       event(s,symbol,time,{action:"DESIGN_FAILED"});
+    }
+  }
+  async analyse(s,fresh,time){
+    if(s.mode!=="provider"||!fresh.size||!this.env.OPENROUTER_API_KEY)return;
+    const hour=Math.floor(time/3600000);
+    if(s.analysisAttempt?.hour===hour)return;
+    s.analysisAttempt={hour,time,status:"pending"};
+    const inputs=Array.from(fresh,([symbol,q])=>{
+      const previous=s.books[symbol].quotes.at(-2);
+      return {symbol,source:q.source,time:q.time,mid:q.mid,bid:q.rawBid,ask:q.rawAsk,
+        changePct:previous?(q.mid/previous.mid-1)*100:null};
+    });
+    try{
+      const response=await generateStrategy(this.env,[
+        {role:"system",content:"Summarise only the supplied market snapshots. Mention observed moves and uncertainty due to missing data. No forecasts, orders or news claims. Return JSON only as {\"summary\":\"up to 80 words\"}."},
+        {role:"user",content:JSON.stringify(inputs)},
+      ]);
+      if(typeof response?.summary!=="string"||!response.summary.trim())throw new Error("Empty analysis");
+      s.analysis={time,inputs,summary:response.summary.trim().slice(0,1000),
+        model:this.env.OPENROUTER_MODEL?.trim()||"openrouter/free"};
+      s.analysisAttempt.status="complete";
+    }catch{
+      s.analysisAttempt.status="failed";
     }
   }
   snapshot(){return this.state;}
@@ -190,6 +219,7 @@ export class Portfolio extends Agent {
         }
         risk();
       }
+      await this.analyse(s,fresh,time);
       for(const symbol of symbols.toSorted((a,b)=>(s.books[a].lastDesign??0)-(s.books[b].lastDesign??0))){
         const b=s.books[symbol];
         if(!s.halted&&fresh.has(symbol)&&!b.active&&!b.challenger&&b.quotes.length>=280){
@@ -241,7 +271,7 @@ export default {
     return new Response(dashboard(state,research,{
       symbols:Object.keys(markets),mode:env.DATA_MODE==="provider"?"provider":"synthetic",
       startingEquity:start,portfolioLimit:lossLimit,strategyLimit,positionSize:size,
-      mark,researchDecision:researchEntryDecision,
+      mark,researchDecision:researchEntryDecision,analysisConfigured:Boolean(env.OPENROUTER_API_KEY),
     }),{headers:{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"}});
   },
 };
