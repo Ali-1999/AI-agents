@@ -56,7 +56,7 @@ function quote(mid,bid,ask,time,cost){
   return {mid,bid:bid*(1-cost),ask:ask*(1+cost),time};
 }
 async function fetchJson(url,headers){
-  const response=await fetch(url,{headers,redirect:"error",signal:AbortSignal.timeout(5000)});
+  const response=await fetch(url,{headers,redirect: "manual",signal:AbortSignal.timeout(5000)});
   if(!response.ok) throw Error("Feed HTTP "+response.status);
   return response.json();
 }

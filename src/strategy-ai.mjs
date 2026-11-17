@@ -9,7 +9,7 @@ export async function generateStrategy(env, messages, request = fetch) {
   }
   const response = await request("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    redirect: "error",
+    redirect: "manual",
     signal: AbortSignal.timeout(15000),
     headers: {"Authorization": "Bearer " + env.OPENROUTER_API_KEY, "Content-Type": "application/json"},
     body: JSON.stringify({model, messages, max_tokens: 500}),
