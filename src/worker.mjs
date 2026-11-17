@@ -1,4 +1,5 @@
 import {generateStrategy} from "./strategy-ai.mjs";
+import {dashboardScript} from "./dashboard-live.mjs";
 import {dashboard} from "./dashboard.mjs";
 import {evaluateCandidate} from "./evaluation.mjs";
 import {researchEntryDecision,validateResearch} from "./research.mjs";
@@ -261,11 +262,14 @@ export default {
       if(saved.date!==report.date)return Response.json({error:"A newer report already exists"},{status:409});
       return Response.json(saved);
     }
-    if(request.method!=="GET"||path!=="/")return new Response("Not found",{status:404});
+    if(request.method!=="GET"||(path!=="/"&&path!=="/dashboard-live.js"))return new Response("Not found",{status:404});
     if(!env.DASHBOARD_TOKEN)return new Response("Set DASHBOARD_TOKEN",{status:503});
     const auth=request.headers.get("Authorization");
     if(auth!=="Basic "+btoa("demo:"+env.DASHBOARD_TOKEN)){
       return new Response("Sign in",{status:401,headers:{"WWW-Authenticate":'Basic realm="Trading Agents"'}});
+    }
+    if(path==="/dashboard-live.js"){
+      return new Response(dashboardScript,{headers:{"Content-Type":"text/javascript; charset=utf-8","Cache-Control":"no-cache","X-Content-Type-Options":"nosniff"}});
     }
     const agent=await getAgentByName(env.Portfolio,env.DATA_MODE==="provider"?"provider":"synthetic");
     const researchAgent=await getAgentByName(env.Portfolio,"research");
@@ -274,6 +278,6 @@ export default {
       symbols:Object.keys(markets),mode:env.DATA_MODE==="provider"?"provider":"synthetic",
       startingEquity:start,portfolioLimit:lossLimit,strategyLimit,positionSize:size,
       mark,researchDecision:researchEntryDecision,analysisConfigured:Boolean(env.OPENROUTER_API_KEY),
-    }),{headers:{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"}});
+    }),{headers:{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'"}});
   },
 };
