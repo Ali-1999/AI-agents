@@ -50,3 +50,7 @@ The endpoint retains the latest report per symbol and rejects older reports. Kee
 - [NautilusTrader](https://github.com/nautechsystems/nautilus_trader) informed the event-by-event quote replay and the use of adverse bid and ask adjustments in the stress scenario. The Worker uses its own lightweight evaluator. It does not run these three external trading engines or model order-book fills.
 
 The dashboard's BACKTEST activity includes both windows, their net P&L, drawdown, closed-trade counts, benchmark P&L and the pass decision. The rolling quote sample is small and can overlap across proposals, so these checks alone do not establish out-of-sample profitability.
+
+## OpenRouter strategy model
+
+Set `OPENROUTER_API_KEY` as a Cloudflare Worker secret. The strategy generator then uses `openrouter/free` by default. To select a specific model, set `OPENROUTER_MODEL` to an exact ID ending in `:free` from the [OpenRouter catalogue](https://openrouter.ai/models). Paid IDs are rejected. Without a key, the Worker uses Cloudflare Workers AI. The local TradingAgents research runner has its own model configuration.

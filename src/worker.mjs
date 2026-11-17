@@ -1,3 +1,4 @@
+import {generateStrategy} from "./strategy-ai.mjs";
 import {dashboard} from "./dashboard.mjs";
 import {evaluateCandidate} from "./evaluation.mjs";
 import {researchEntryDecision,validateResearch} from "./research.mjs";
@@ -92,12 +93,8 @@ export class Portfolio extends Agent {
       const designQuotes=book.quotes.slice(0,-240);
       const movement=designQuotes.slice(1).map((q,i)=>Math.abs(q.mid/designQuotes[i].mid-1));
       const avg=movement.reduce((a,b)=>a+b,0)/movement.length;
-      const response=await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct",{
-        messages:[{role:"system",content:"Return one JSON object only. family must be momentum or reversion, lookback must be 4, 8, 12 or 20, threshold must be 10, 20, 35 or 50 basis points. No additional keys."},
-        {role:"user",content:JSON.stringify({symbol,meanAbsoluteReturn:avg,avoid:book.tried})}],
-        max_tokens:100,
-      });
-      const raw=typeof response.response==="string"?JSON.parse(response.response):response.response;
+      const raw=await generateStrategy(this.env,[{role:"system",content:"Return one JSON object only. family must be momentum or reversion, lookback must be 4, 8, 12 or 20, threshold must be 10, 20, 35 or 50 basis points. No additional keys."},
+        {role:"user",content:JSON.stringify({symbol,meanAbsoluteReturn:avg,avoid:book.tried})}]);
       if(!valid(raw))throw Error("Invalid rule");
       const rule={family:raw.family,lookback:raw.lookback,threshold:raw.threshold};
       if(book.tried.some(r=>same(r,rule)))throw Error("Duplicate rule");
