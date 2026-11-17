@@ -17,7 +17,7 @@ function table(headers, rows, empty) {
 
 export function dashboard(state, research, config) {
   const { symbols, mode, startingEquity, portfolioLimit, strategyLimit, positionSize, mark, researchDecision, analysisConfigured } = config;
-  const charts = symbols.map(symbol => technicalCard(symbol, state.books[symbol]?.quotes ?? [], Date.now(), escape, price)).join("");
+  const charts = symbols.map(symbol => technicalCard(symbol, state.books[symbol]?.quotes ?? [], Date.now(), escape, price, state.books[symbol]?.status)).join("");
   const events = [...state.events].reverse();
   const books = symbols.map(symbol => [symbol, state.books[symbol] ?? {}]);
   const markets = books.map(([symbol, book]) => {
@@ -80,7 +80,7 @@ export function dashboard(state, research, config) {
 <p>Last scan ${escape(time(state.last))} · ${state.tick} scans</p>
 <nav aria-label="Dashboard sections"><a href="#charts">Charts</a><a href="#markets">Markets</a><a href="#strategies">Strategies</a><a href="#positions">Positions</a><a href="#analysis">AI analysis</a><a href="#research">Research</a><a href="#backtests">Backtests</a><a href="#activity">Activity</a></nav>
 <dl>${metrics.map(([label,value]) => "<div><dt>" + label + "</dt><dd>" + escape(value) + "</dd></div>").join("")}</dl>
-${section("charts","Price charts and technical analysis",'<p>Hourly bars reconstructed from sampled midquotes. Gaps between plotted sessions are compressed. ICT, SMC and MSNR are rule-based overlays on these samples. Green marks support, pink resistance, blue the most recent swing break, and amber the latest open fair value gap.</p><div class="charts">'+charts+"</div>")}
+${section("charts","Price charts and technical analysis",'<p>A quote preview appears with the first sample. Hourly bars are reconstructed from sampled midquotes. Gaps between plotted sessions are compressed. ICT, SMC and MSNR are rule-based overlays on these samples. Green marks support, pink resistance, blue the most recent swing break, and amber the latest open fair value gap.</p><div class="charts">'+charts+"</div>")}
 ${section("markets","Markets",table(["Symbol","Feed status","Quote time (UTC)","Mid","Source","Quoted bid","Quoted ask","Samples","Stage","Research filter","Last AI proposal (UTC)"],markets,"No markets."))}
 ${section("strategies","Agent strategies",table(["Symbol","Stage","Rule","Closed trades","Realised P&L","Marked P&L","Max drawdown","Drawdown limit","Open entry"],strategies,"No active or shadow strategies yet."))}
 ${section("positions","Open demo positions",table(["Symbol","Entry","Sim. bid","Entry notional","Unrealised P&L","Last mark (UTC)"],positions,"No open demo positions."))}

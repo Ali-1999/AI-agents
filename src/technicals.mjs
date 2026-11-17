@@ -72,10 +72,33 @@ function chart(bars, levels) {
   return '<svg viewBox="0 0 550 156" role="img" aria-label="Hourly sampled candlesticks with price levels" font-size="10">'+guides+overlays+candles+'</svg>';
 }
 
-export function technicalCard(symbol, quotes, now, escape, price) {
+function quotePreview(quotes, now, escape, price, status) {
+  const samples = quotes.filter(q => Number.isFinite(q.time) && q.time <= now &&
+    Number.isFinite(q.mid) && q.mid > 0).slice(-60);
+  if (!samples.length) return "<p>No quotes received. " + escape(status || "Waiting for the first scheduled scan.") + "</p>";
+  const first = samples[0];
+  const last = samples.at(-1);
+  const min = Math.min(...samples.map(q=>q.mid));
+  const max = Math.max(...samples.map(q=>q.mid));
+  const points = samples.map((q,i)=>[
+    samples.length === 1 ? 225 : 14 + 450*i/(samples.length-1),
+    max === min ? 77 : 16 + 123*(max-q.mid)/(max-min),
+  ]);
+  const [x,y] = points.at(-1);
+  const line = points.length > 1 ? '<polyline points="' + points.map(p=>p.join(",")).join(" ") +
+    '" fill="none" stroke="#60e6c2" stroke-width="2"/>' : "";
+  return '<svg viewBox="0 0 550 156" role="img" aria-label="Recent sampled midquotes">' +
+    '<path d="M14 16H464 M14 77H464 M14 139H464" stroke="#294051"/>' +
+    line + '<circle cx="'+x+'" cy="'+y+'" r="4" fill="#60e6c2"/></svg>' +
+    '<p class="chart-time">Latest sample '+escape(price(last.mid))+' · '+escape(new Date(last.time).toISOString())+
+    (samples.length > 1 ? ' · '+samples.length+' samples since '+escape(new Date(first.time).toISOString()) : '')+'</p>' +
+    '<p>ICT, SMC and MSNR overlays appear once three completed hourly bars are available.</p>';
+}
+
+export function technicalCard(symbol, quotes, now, escape, price, status) {
   const bars = sampledCandles(quotes, now);
   const heading = '<article class="instrument"><h3>'+escape(symbol)+'</h3>';
-  if (bars.length < 3) return heading+'<p>Waiting for three completed hourly bars with at least three samples each.</p></article>';
+  if (bars.length < 3) return heading+quotePreview(quotes,now,escape,price,status)+'</article>';
   const {gap,structure,support,resistance} = analyseCandles(bars);
   const levels = [
     {price:support,colour:"#49dfb1"}, {price:resistance,colour:"#ff8292"},
