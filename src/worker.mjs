@@ -1,4 +1,4 @@
-import {validateResearch} from "./research.mjs";
+import {researchEntryDecision,validateResearch} from "./research.mjs";
 import {Agent,getAgentByName} from "agents";
 const markets={SPY:500,"BTC/USD":65000,"EUR/USD":1.08};
 const interval=300000;
@@ -12,7 +12,7 @@ const valid=r=>r && ["momentum","reversion"].includes(r.family) &&
   [4,8,12,20].includes(r.lookback) && [10,20,35,50].includes(r.threshold);
 const same=(a,b)=>a&&b&&a.family===b.family&&a.lookback===b.lookback&&a.threshold===b.threshold;
 const mark=(p,q)=>p.pnl+(p.entry?size*(q.bid/p.entry-1):0);
-function step(p,r,history,q,stop=false){
+function step(p,r,history,q,stop=false,allowEntry=true){
   const value=mark(p,q);
   p.peak=Math.max(p.peak,value);
   p.dd=Math.max(p.dd,p.peak-value);
@@ -27,7 +27,7 @@ function step(p,r,history,q,stop=false){
     p.trades++;
     return {action:"SELL",net,price:q.bid,breach};
   }
-  if(!p.entry&&!stop&&!breach&&window.length===r.lookback&&signal>=r.threshold){
+  if(allowEntry&&!p.entry&&!stop&&!breach&&window.length===r.lookback&&signal>=r.threshold){
     p.entry=q.ask;
     return {action:"BUY",price:q.ask};
   }
@@ -122,7 +122,7 @@ export class Portfolio extends Agent {
   onStart(){
     this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS research (symbol TEXT PRIMARY KEY, date TEXT NOT NULL, rating TEXT NOT NULL)");
   }
-  async tick(time){
+  async tick(time,reports=null){
     if(this.running)return;
     this.running=true;
     try{
@@ -159,9 +159,11 @@ export class Portfolio extends Agent {
       for(const [symbol,q] of fresh){
         const b=s.books[symbol];
         const prices=b.quotes.slice(-20).map(x=>x.mid);
+        const research=researchEntryDecision(mode,symbol,reports,time);
+        if(research.reason)b.status+=" · "+research.reason;
         if(b.active){
           if(!stale||b.active.stats.entry||s.halted){
-            const fill=step(b.active.stats,b.active.rule,prices,q,s.halted);
+            const fill=step(b.active.stats,b.active.rule,prices,q,s.halted,research.allowed);
             event(s,symbol,time,fill);
             if(fill?.breach){
               b.realised+=b.active.stats.pnl;
@@ -172,7 +174,7 @@ export class Portfolio extends Agent {
         }
         if(!s.halted&&b.challenger){
           const c=b.challenger;
-          if(step(c.stats,c.rule,prices,q)?.breach)b.challenger=null;
+          if(step(c.stats,c.rule,prices,q,false,research.allowed)?.breach)b.challenger=null;
           else if(!b.active&&qualified(c.stats,12)&&!c.stats.entry){
             b.active={rule:c.rule,stats:blank()};
             b.challenger=null;
@@ -207,13 +209,22 @@ function dashboard(s,research){
   const rows=Object.entries(s.books).map(([symbol,b])=>"<tr><td>"+symbol+"</td><td>"+escape(b.status)+"</td><td>"+(b.quotes.length)+"</td><td>"+escape(b.active?.rule.family??(b.challenger?"Shadow testing":"Waiting"))+"</td><td>"+money(b.realised+(b.active?mark(b.active.stats,b.last):0))+"</td></tr>").join("");
   const events=[...s.events].reverse().map(e=>"<tr><td>"+new Date(e.time).toISOString()+"</td><td>"+escape(e.symbol)+"</td><td>"+escape(e.action)+"</td><td>"+escape(JSON.stringify(e.report??e.rule??e.net??e.price??""))+"</td></tr>").join("");
   const researchRows=research.map(r=>"<tr><td>"+escape(r.symbol)+"</td><td>"+escape(r.date)+"</td><td>"+escape(r.rating)+"</td></tr>").join("");
-  const researchSection="<section><h2>TradingAgents research</h2><p>Research ratings are advisory and do not enter the simulator.</p>"+(researchRows?"<table><thead><tr><th>Symbol</th><th>Analysis date</th><th>Rating</th></tr></thead><tbody>"+researchRows+"</tbody></table>":"<p>No reports submitted.</p>")+"</section>";
+  const researchSection="<section><h2>TradingAgents research</h2><p>In provider mode, new SPY and BTC/USD entries require a BUY or OVERWEIGHT rating dated today (UTC).</p>"+(researchRows?"<table><thead><tr><th>Symbol</th><th>Analysis date</th><th>Rating</th></tr></thead><tbody>"+researchRows+"</tbody></table>":"<p>No reports submitted.</p>")+"</section>";
   return "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Trading Agents</title><style>body{font:16px system-ui;background:#101720;color:#edf3fb;max-width:960px;margin:48px auto;padding:0 20px}section{overflow:auto;margin:28px 0}table{width:100%;border-collapse:collapse}td,th{padding:12px;text-align:left;border-bottom:1px solid #344354}p{color:#b9c8dc}</style><main><h1>Trading Agents</h1><p>Demo simulation · "+escape(s.mode??"Waiting for first scan")+" · "+(s.halted?"Portfolio halted":"Running")+"</p><h2>$"+money(start+s.pnl)+" virtual equity</h2><p>Last scan "+(s.last?new Date(s.last).toISOString():"pending")+"</p><section><h2>Markets</h2><table><thead><tr><th>Symbol</th><th>Feed</th><th>Samples</th><th>Strategy</th><th>Net P&amp;L</th></tr></thead><tbody>"+rows+"</tbody></table></section><section><h2>Activity</h2><table><thead><tr><th>Time</th><th>Market</th><th>Action</th><th>Details</th></tr></thead><tbody>"+events+"</tbody></table></section>"+researchSection+"</main></html>";
 }
 export default {
   async scheduled(controller,env){
     const agent=await getAgentByName(env.Portfolio,env.DATA_MODE==="provider"?"provider":"synthetic");
-    await agent.tick(controller.scheduledTime);
+    let reports=null;
+    if(env.DATA_MODE==="provider"){
+      try{
+        const researchAgent=await getAgentByName(env.Portfolio,"research");
+        reports=await researchAgent.listResearch();
+      }catch(error){
+        console.warn("TradingAgents reports unavailable",error);
+      }
+    }
+    await agent.tick(controller.scheduledTime,reports);
   },
   async fetch(request,env){
     const path=new URL(request.url).pathname;

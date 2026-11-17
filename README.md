@@ -25,7 +25,7 @@ Check CPU and AI usage in Cloudflare before increasing the watchlist or proposal
 
 ## TradingAgents research
 
-The [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) Python graph runs on your computer and publishes the latest rating for SPY or BTC/USD to the Cloudflare dashboard. It runs the upstream market analyst, research debate, trader and risk review. The dashboard marks the ratings as advisory. No imported rating can place a simulated or real order. Forex continues through the existing simulator.
+The [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) Python graph runs on your computer and publishes the latest rating for SPY or BTC/USD to the Cloudflare dashboard. It runs the upstream market analyst, research debate, trader and risk review. In provider mode, a current UTC-day BUY or OVERWEIGHT rating permits a new SPY or BTC/USD position only when the existing strategy independently signals entry. HOLD, UNDERWEIGHT, SELL, REVIEW, a missing or outdated report, and a research-service failure block new positions. This applies to shadow testing and simulated portfolio entries. Existing positions still exit through the strategy and risk controls. Historical backtests use the strategy rules alone because historical TradingAgents ratings are unavailable. Synthetic mode and forex run without this research filter.
 
 1. Install Python 3.11+ and Git, then run `python -m pip install -r integrations/requirements.txt` in a virtual environment.
 2. In Cloudflare, add a separate Worker secret named `RESEARCH_TOKEN` and deploy. Set the same value in your local environment, along with `TRADINGAGENTS_WORKER_URL` set to your Worker HTTPS origin.

@@ -9,3 +9,15 @@ export function validateResearch(body, today = new Date().toISOString().slice(0,
       body.date > today) return null;
   return { symbol: body.symbol, rating: body.rating, date: body.date };
 }
+
+export function researchEntryDecision(mode, symbol, reports, scanTime) {
+  if (mode !== "provider" || !symbols.includes(symbol)) return { allowed: true };
+  if (reports === null) return { allowed: false, reason: "Research unavailable" };
+  const today = new Date(scanTime).toISOString().slice(0, 10);
+  const report = reports.find(row => row.symbol === symbol);
+  if (report?.date !== today) return { allowed: false, reason: "Waiting for today's UTC research" };
+  return {
+    allowed: report.rating === "BUY" || report.rating === "OVERWEIGHT",
+    reason: "TradingAgents: " + report.rating,
+  };
+}
