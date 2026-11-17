@@ -13,7 +13,7 @@ A Cloudflare Worker for simulated trading across SPY, BTC/USD and EUR/USD. Cloud
 - Synthetic mode is the default and runs without broker credentials. Synthetic and provider sessions have separate history. Provider calls only read prices. All fills use virtual funds.
 - The strategy designer can request one model proposal per UTC day across the portfolio. It uses summary statistics from the earlier samples and allows only predefined strategy families and parameter ranges.
 - An instrument needs 280 fresh samples before design starts. At five-minute intervals this takes at least about 23 hours, and session closures or stale quotes can extend it. Backtesting uses the later 240 samples, including a 20-sample warm-up.
-- A proposal needs at least four closed historical trades and positive simulated P&L without hitting the strategy drawdown limit. It then needs at least twelve closed shadow trades and the same risk and profit checks before it can trade in the demo portfolio.
+- A proposal needs at least two closed trades, positive net P&L and drawdown below the strategy limit in each of two chronological evaluation windows, at both normal costs and with an additional five basis points of cost per side. It then needs at least twelve closed shadow trades and the same risk and profit checks before it can trade in the demo portfolio.
 - The strategy is retired on a drawdown breach. A newly qualified strategy may replace it. If no strategy qualifies, the market stays idle. A portfolio halt remains latched and stops entries across all instruments.
 - Defaults are USD 10,000 in virtual equity, USD 500 position size, USD 40 strategy drawdown and USD 80 portfolio drawdown. Stale positions can only be closed once a fresh quote arrives. The simulator models spreads and a fixed per-side cost. It does not model order-book depth, partial fills or forex rollover.
 
@@ -41,3 +41,12 @@ The [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgen
 4. Run `python integrations/tradingagents_report.py SPY` or `python integrations/tradingagents_report.py BTC/USD`. Refresh the dashboard to see the rating and analysis date. Local inference requires a running computer and upstream data access. The Worker can continue demo scanning independently.
 
 The endpoint retains the latest report per symbol and rejects older reports. Keep the research secret and provider credentials out of GitHub.
+
+## Evaluation design
+
+- [TradingAgents](https://github.com/TauricResearch/TradingAgents) supplies the research ratings used during provider-mode simulation.
+- [LEAN](https://github.com/QuantConnect/Lean) informed the comparison against a buy-and-hold benchmark over the same evaluation periods. The benchmark is reported for context.
+- [Freqtrade](https://github.com/freqtrade/freqtrade) informed the separate historical and shadow-trading checks. Each historical window must pass at normal and stressed costs before forward shadow testing.
+- [NautilusTrader](https://github.com/nautechsystems/nautilus_trader) informed the event-by-event quote replay and the use of adverse bid and ask adjustments in the stress scenario. The Worker uses its own lightweight evaluator. It does not run these three external trading engines or model order-book fills.
+
+The dashboard's BACKTEST activity includes both windows, their net P&L, drawdown, closed-trade counts, benchmark P&L and the pass decision. The rolling quote sample is small and can overlap across proposals, so these checks alone do not establish out-of-sample profitability.

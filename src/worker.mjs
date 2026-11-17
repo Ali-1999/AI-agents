@@ -1,3 +1,4 @@
+import {evaluateCandidate} from "./evaluation.mjs";
 import {researchEntryDecision,validateResearch} from "./research.mjs";
 import {Agent,getAgentByName} from "agents";
 const markets={SPY:500,"BTC/USD":65000,"EUR/USD":1.08};
@@ -43,7 +44,7 @@ function replay(rule,quotes){
     prices.push(q.mid);
     last=q;
   }
-  if(last&&stats.entry) step(stats,rule,prices,last,true);
+  if(last&&stats.entry) stats.pnl=mark(stats,last);
   return stats;
 }
 function quote(mid,bid,ask,time,cost){
@@ -100,9 +101,9 @@ export class Portfolio extends Agent {
       const rule={family:raw.family,lookback:raw.lookback,threshold:raw.threshold};
       if(book.tried.some(r=>same(r,rule)))throw Error("Duplicate rule");
       book.tried=[...book.tried,rule].slice(-20);
-      const report=replay(rule,book.quotes.slice(-240));
-      event(s,symbol,time,{action:"BACKTEST",rule,report:{pnl:report.pnl,dd:report.dd,trades:report.trades}});
-      if(qualified(report,4))book.challenger={rule,stats:blank()};
+      const report=evaluateCandidate(rule,book.quotes.slice(-240),replay,qualified);
+      event(s,symbol,time,{action:"BACKTEST",rule,report});
+      if(report.passed)book.challenger={rule,stats:blank()};
     }catch {
       event(s,symbol,time,{action:"DESIGN_FAILED"});
     }
